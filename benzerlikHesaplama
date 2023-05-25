@@ -1,0 +1,101 @@
+#include <opencv2/opencv.hpp>
+#include <iostream>
+#include <vector>
+#include <algorithm>
+
+using namespace cv;
+using namespace std;
+
+//yamaların boyutunu belirleme
+const int PATCH_SIZE = 20;
+
+double calculateSimilarity(const Mat& patch1, const Mat& patch2) {
+    // Benzerlik hesaplama yöntemleri burada uygulanır.
+    // İki yama arasındaki histogram benzerliğini hesaplıyoruz.
+    Mat hist1, hist2;
+    calcHist(&patch1, 1, 0, Mat(), hist1, 1, &PATCH_SIZE, 0);
+    calcHist(&patch2, 1, 0, Mat(), hist2, 1, &PATCH_SIZE, 0);
+    double similarity = compareHist(hist1, hist2, cv::HISTCMP_CORREL);
+    return similarity;
+}
+
+bool compareSimilarity(const pair<pair<int, int>, double>& a, const pair<pair<int, int>, double>& b) {
+    return a.second > b.second;
+}
+
+vector<pair<pair<int, int>, double>> findSimilarImages(const string& folderPath) {
+    vector<string> imageFiles;
+    glob(folderPath + "/*.png", imageFiles);
+
+    vector<pair<pair<int, int>, double>> similarImages;
+
+    //Bu for döngüsünde 0'dan başlayarak koyduğumuz resim dosyasının boyutuna kadar tek tek artarak tüm resimleri gezdiriyoruz.
+
+    for (int i = 0; i < imageFiles.size(); i++) {
+        string imagePath1 = imageFiles[i];
+        Mat image1 = imread(imagePath1);
+
+        vector<Mat> patches1;
+        //PATCH_SIZE sabiti, yama boyutunu belirtir.
+        //Bu for döngüsü image1 adlı bir görüntüyü yamalara ayırarak patches1 adlı bir Mat vektörüne depolama yapar.
+        for (int y = 0; y < image1.rows; y += PATCH_SIZE) {
+            for (int x = 0; x < image1.cols; x += PATCH_SIZE) {
+                Mat patch1 = image1(Rect(x, y, PATCH_SIZE, PATCH_SIZE));
+                patches1.push_back(patch1);
+            }
+        }
+
+        //Bu for döngüsü imageFiles vektöründe bulunan görüntü dosyaları arasında bir çift seçerek, bu çiftin benzerlik ölçütünü hesaplar.
+        for (int j = i + 1; j < imageFiles.size(); j++) {
+            string imagePath2 = imageFiles[j];
+            Mat image2 = imread(imagePath2);
+
+            //image2 olarak adlandırılan görüntünün farklı bölgelerini küçük yamalara bölmek için 
+            vector<Mat> patches2;
+
+            for (int y = 0; y < image2.rows; y += PATCH_SIZE) {
+                for (int x = 0; x < image2.cols; x += PATCH_SIZE) {
+                    Mat patch2 = image2(Rect(x, y, PATCH_SIZE, PATCH_SIZE));
+                    patches2.push_back(patch2);
+                }
+            }
+            //patches1 ve patches2 vektörlerinde bulunan yamalar arasında benzerlik hesaplaması yaparak en yüksek benzerlik değerini bulmak için
+            double maxSimilarity = 0;
+            for (const auto& patch1 : patches1) {
+                for (const auto& patch2 : patches2) {
+                    double similarity = calculateSimilarity(patch1, patch2);
+                    if (similarity > maxSimilarity) {
+                        maxSimilarity = similarity;
+                    }
+                }
+            }
+
+            //en yüksek benzerlik değerlerini ve hangi görüntülerin bu değerlere sahip olduğunu kaydetmek için 
+            similarImages.push_back(make_pair(make_pair(i, j), maxSimilarity));
+
+            image2.release();
+        }
+
+        image1.release();
+    }
+
+    sort(similarImages.begin(), similarImages.end(), compareSimilarity);
+
+    return similarImages;
+}
+
+int main() {
+    string folderPath = "C:/Users/sulee/OneDrive/Masaüstü/ALGORTIMA_ANALIZI_ODEV_SOURCES";
+
+    vector<pair<pair<int, int>, double>> similarPairs = findSimilarImages(folderPath);
+
+    cout << "Benzerlik Oranı En Yüksek Olan Çiftler:" << endl;
+    for (const auto& pair : similarPairs) {
+        cout << "Görüntü 1: " << pair.first.first << endl;
+        cout << "Görüntü 2: " << pair.first.second << endl;
+        cout << "Benzerlik Oranı: " << pair.second << endl;
+        cout << "---" << endl;
+    }
+
+    return 0;
+}
